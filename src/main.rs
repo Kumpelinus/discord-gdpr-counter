@@ -6,6 +6,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use zip::read::ZipArchive;
 
+
 /// Discord Message Counter
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -26,13 +27,14 @@ struct Cli {
     min_messages: usize,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+
+#[derive(ValueEnum, Clone)]
 enum ConversationType {
     Dm,
     Guild,
 }
 
-#[derive(Debug)]
+
 enum Conversation {
     DmOrGc {
         name: String,
@@ -45,11 +47,13 @@ enum Conversation {
     },
 }
 
-#[derive(Debug, Clone)]
+
+#[derive(Clone)]
 struct Channel {
     name: String,
     message_count: usize,
 }
+
 
 impl Conversation {
     fn message_count(&self) -> usize {
@@ -85,6 +89,7 @@ impl Conversation {
         }
     }
 }
+
 
 fn main() {
     let cli = Cli::parse();
