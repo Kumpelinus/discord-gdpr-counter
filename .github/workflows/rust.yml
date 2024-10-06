@@ -34,19 +34,15 @@ jobs:
 
       - run: rustup toolchain install stable --profile minimal --no-self-update
 
-      - uses: ./
-        with:
-          workspaces: tests
-
+      # Run your Rust commands in the root directory
       - run: |
           cargo check
           cargo test
           cargo build --release
-        working-directory: tests
 
       # Upload the build artifact (adjust the path if necessary)
       - name: Upload build artifact
         uses: actions/upload-artifact@v3
         with:
           name: binary-${{ matrix.os }}
-          path: tests/target/release/
+          path: target/release/
