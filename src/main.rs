@@ -1,40 +1,52 @@
-use clap::{Parser, ValueEnum};
-use indicatif::ProgressBar;
+use argh::FromArgs;
+use indicatif::{ProgressBar, ProgressStyle};
+use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use tempfile::tempdir;
 use zip::read::ZipArchive;
 
-
 /// Discord Message Counter
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[derive(FromArgs)]
 struct Cli {
-    /// Path to the Discord data package (ZIP file or extracted folder)
+    /// path to the Discord data package (ZIP file or extracted folder)
+    #[argh(positional)]
     input_path: PathBuf,
 
-    /// Limit the number of conversations displayed
-    #[arg(short, long)]
+    /// limit the number of conversations displayed
+    #[argh(option, short = 'l')]
     limit: Option<usize>,
 
-    /// Filter by conversation type (dm, guild)
-    #[arg(short, long, value_enum, value_name = "TYPE")]
+    /// filter by conversation type (dm, guild)
+    #[argh(option, short = 't')]
     conversation_type: Option<ConversationType>,
 
-    /// Minimum message count to display
-    #[arg(short, long, default_value_t = 1)]
+    /// minimum message count to display
+    #[argh(option, short = 'm', default = "1")]
     min_messages: usize,
 }
 
-
-#[derive(ValueEnum, Clone)]
+#[derive(Debug, Clone)]
 enum ConversationType {
     Dm,
     Guild,
 }
 
+impl std::str::FromStr for ConversationType {
+    type Err = String;
 
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "dm" => Ok(ConversationType::Dm),
+            "guild" => Ok(ConversationType::Guild),
+            _ => Err(format!("Invalid conversation type: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug)]
 enum Conversation {
     DmOrGc {
         name: String,
@@ -47,13 +59,11 @@ enum Conversation {
     },
 }
 
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Channel {
     name: String,
     message_count: usize,
 }
-
 
 impl Conversation {
     fn message_count(&self) -> usize {
@@ -74,9 +84,8 @@ impl Conversation {
                 channels,
             } => {
                 println!("{} [{} messages]", name, message_count);
-                // Sort channels within the guild
                 let mut sorted_channels = channels.clone();
-                sorted_channels.sort_by(|a, b| b.message_count.cmp(&a.message_count));
+                sorted_channels.sort_unstable_by(|a, b| b.message_count.cmp(&a.message_count));
                 for (i, channel) in sorted_channels.iter().enumerate() {
                     let connector = if i == sorted_channels.len() - 1 { "└──" } else { "├──" };
                     println!(
@@ -90,9 +99,8 @@ impl Conversation {
     }
 }
 
-
 fn main() {
-    let cli = Cli::parse();
+    let cli: Cli = argh::from_env();
 
     // Determine the data path
     let data_root = match prepare_data_root(&cli.input_path) {
@@ -107,33 +115,72 @@ fn main() {
     let messages_folder = data_root.join("messages");
     let servers_folder = data_root.join("servers");
 
-    let channel_mapping = load_channel_mapping(&messages_folder.join("index.json"));
-    let guild_mapping = load_guild_mapping(&servers_folder.join("index.json"));
+    let channel_mapping = load_mapping(&messages_folder.join("index.json"));
+    let guild_mapping = load_mapping(&servers_folder.join("index.json"));
 
     let mut conversations = Vec::new();
     let mut guilds = HashMap::new();
 
+    // Create a progress bar
     let progress = ProgressBar::new_spinner();
+    progress.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner} {msg}")
+            .expect("Failed to set progress bar template"),
+    );
     progress.enable_steady_tick(std::time::Duration::from_millis(100));
     progress.set_message("Processing conversations...");
 
-    for entry in fs::read_dir(&messages_folder).unwrap() {
-        let entry = entry.unwrap();
+    for entry in match fs::read_dir(&messages_folder) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!("Failed to read messages directory: {}", e);
+            return;
+        }
+    } {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("Failed to read entry in messages directory: {}", e);
+                continue;
+            }
+        };
         let path = entry.path();
 
         if path.is_dir() {
-            let channel_id = path.file_name().unwrap().to_string_lossy().into_owned();
+            let channel_id = match path.file_name() {
+                Some(name) => name.to_string_lossy().into_owned(),
+                None => {
+                    eprintln!("Failed to get channel ID from path: {:?}", path);
+                    continue;
+                }
+            };
 
             let messages_file = path.join("messages.json");
             let channel_info_file = path.join("channel.json");
 
             if messages_file.exists() && channel_info_file.exists() {
-                let channel_info: serde_json::Value = read_json(&channel_info_file);
-                let messages: Vec<serde_json::Value> = read_json(&messages_file);
+                let channel_info: serde_json::Value = match read_json(&channel_info_file) {
+                    Ok(info) => info,
+                    Err(e) => {
+                        eprintln!("Failed to read channel info: {}", e);
+                        continue;
+                    }
+                };
+                let messages: Vec<serde_json::Value> = match read_json(&messages_file) {
+                    Ok(msgs) => msgs,
+                    Err(e) => {
+                        eprintln!("Failed to read messages: {}", e);
+                        continue;
+                    }
+                };
                 let channel_message_count = messages.len();
 
                 if let Some(guild_info) = channel_info.get("guild") {
-                    let guild_id = guild_info.get("id").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                    let guild_id = guild_info
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown");
                     let guild_name = guild_mapping
                         .as_ref()
                         .and_then(|gm| gm.get(guild_id))
@@ -145,11 +192,13 @@ fn main() {
                         .unwrap_or(&channel_id)
                         .to_string();
 
-                    let guild = guilds.entry(guild_id.to_string()).or_insert_with(|| Conversation::Guild {
-                        name: guild_name.clone(),
-                        message_count: 0,
-                        channels: Vec::new(),
-                    });
+                    let guild = guilds
+                        .entry(guild_id.to_string())
+                        .or_insert_with(|| Conversation::Guild {
+                            name: guild_name.clone(),
+                            message_count: 0,
+                            channels: Vec::new(),
+                        });
 
                     if let Conversation::Guild {
                         message_count: guild_message_count,
@@ -181,16 +230,12 @@ fn main() {
         }
     }
 
-    // Add guilds to conversations
-    for guild in guilds.into_values() {
-        conversations.push(guild);
-    }
-
     progress.finish_and_clear();
 
     // Filter conversations based on user input
     let mut filtered_conversations: Vec<_> = conversations
         .into_iter()
+        .chain(guilds.into_values())
         .filter(|conv| {
             if conv.message_count() < cli.min_messages {
                 return false;
@@ -223,20 +268,24 @@ fn main() {
 
 fn prepare_data_root(input_path: &PathBuf) -> Result<PathBuf, Box<dyn std::error::Error>> {
     if input_path.is_file() {
-        // Check if it's a ZIP file by attempting to open it
+        // Try to open it as a ZIP file
         let file = File::open(input_path)?;
         let mut archive = ZipArchive::new(file)?;
-        let temp_dir = tempfile::tempdir()?;
+        let temp_dir = tempdir()?;
         archive.extract(&temp_dir)?;
         Ok(temp_dir.into_path())
     } else if input_path.is_dir() {
         Ok(input_path.clone())
     } else {
-        Err(format!("Invalid input path: {}", input_path.display()).into())
+        Err(format!(
+            "Input path must be a file or directory: {}",
+            input_path.display()
+        )
+        .into())
     }
 }
 
-fn load_channel_mapping(path: &Path) -> Option<HashMap<String, String>> {
+fn load_mapping(path: &Path) -> Option<HashMap<String, String>> {
     if path.exists() {
         let file = File::open(path).ok()?;
         let reader = BufReader::new(file);
@@ -246,18 +295,8 @@ fn load_channel_mapping(path: &Path) -> Option<HashMap<String, String>> {
     }
 }
 
-fn load_guild_mapping(path: &Path) -> Option<HashMap<String, String>> {
-    if path.exists() {
-        let file = File::open(path).ok()?;
-        let reader = BufReader::new(file);
-        serde_json::from_reader(reader).ok()
-    } else {
-        None
-    }
-}
-
-fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> T {
-    let file = File::open(path).expect("Failed to open JSON file");
+fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, serde_json::Error> {
+    let file = File::open(path).map_err(serde_json::Error::io)?;
     let reader = BufReader::new(file);
-    serde_json::from_reader(reader).expect("Failed to parse JSON")
+    serde_json::from_reader(reader)
 }
