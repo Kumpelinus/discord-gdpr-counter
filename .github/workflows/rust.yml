@@ -1,0 +1,52 @@
+name: Rust
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    name: Test `cargo check/test/build` on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+
+      - uses: ./
+        with:
+          workspaces: tests
+
+      - run: |
+          cargo check
+          cargo test
+          cargo build --release
+        working-directory: tests
+
+      # Upload the build artifact (adjust the path if necessary)
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: binary-${{ matrix.os }}
+          path: tests/target/release/
