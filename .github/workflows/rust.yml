@@ -96,14 +96,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
-          zip -j artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/my_executable_name
+          zip -j artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/discord-gdpr-counter
 
       # Zipping for Windows
       - name: Zip the build on Windows
         if: runner.os == 'Windows'
         run: |
           mkdir -p artifacts
-          powershell Compress-Archive -Path target/release/my_executable_name.exe -DestinationPath artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
+          powershell Compress-Archive -Path target/release/discord-gdpr-counter.exe -DestinationPath artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
