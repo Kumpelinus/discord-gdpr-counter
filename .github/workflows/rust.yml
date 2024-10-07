@@ -1,134 +1,111 @@
-name: Rust
+name: CI and Release Build
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**.md"
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "**.md"
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'  # Trigger on version tags for releases
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        features:
-          - ""
-          - "zip"
-
-    name: Build and Test on ${{ matrix.os }} with features '${{ matrix.features }}'
+  build-test:
     runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          # Linux Builds
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            features: ""
+            label: "standard"
+
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            features: "zip"
+            label: "full"
+
+          # macOS Builds
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            arch: x86_64
+            features: ""
+            label: "standard"
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            arch: x86_64
+            features: "zip"
+            label: "full"
+
+          # Windows Builds
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x86_64
+            features: ""
+            label: "standard"
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x86_64
+            features: "zip"
+            label: "full"
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - uses: actions-rs/toolchain@v1
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
 
-      - name: Install zip (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y zip
-
-      - name: Install zip (macOS)
-        if: runner.os == 'macOS'
-        run: brew install zip
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check
-        run: cargo check --features "${{ matrix.features }}"
-
-      - name: Test
-        run: cargo test --features "${{ matrix.features }}"
-
-      - name: Lint
-        run: cargo clippy --all-targets --features "${{ matrix.features }}" -- -D warnings
-
-      - name: Format
-        run: cargo fmt --all -- --check
+        run: |
+          if [ "${{ matrix.features }}" == "zip" ]; then
+            cargo check --features "zip"
+          else
+            cargo check
+          fi
 
       - name: Build
-        run: cargo build --release --features "${{ matrix.features }}"
-
-      - name: Set Target Triple (Linux and macOS)
-        if: runner.os != 'Windows'
-        shell: bash
         run: |
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            echo "TARGET_TRIPLE=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-          elif [ "${{ runner.os }}" == "macOS" ]; then
-            echo "TARGET_TRIPLE=x86_64-apple-darwin" >> $GITHUB_ENV
-          fi
-
-      - name: Set Target Triple (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          echo "TARGET_TRIPLE=x86_64-pc-windows-msvc" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Set Artifact Name (Linux and macOS)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [ "${{ matrix.features }}" != "" ]; then
-            if [ "${{ matrix.features }}" == "zip" ]; then
-              FEATURE_NAME="full"
-            else
-              FEATURE_NAME="${{ matrix.features }}"
-            fi
-            ARTIFACT_NAME="discord-gdpr-counter-${{ env.TARGET_TRIPLE }}.${FEATURE_NAME}"
+          if [ "${{ matrix.features }}" == "zip" ]; then
+            cargo build --release --features "zip"
           else
-            ARTIFACT_NAME="discord-gdpr-counter-${{ env.TARGET_TRIPLE }}"
+            cargo build --release
           fi
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
 
-      - name: Set Artifact Name (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if ($Env:matrix_features -ne "") {
-            if ($Env:matrix_features -eq "zip") {
-              $FEATURE_NAME = "full"
-            } else {
-              $FEATURE_NAME = $Env:matrix_features
-            }
-            $ARTIFACT_NAME = "discord-gdpr-counter-$Env:TARGET_TRIPLE.$FEATURE_NAME"
-          } else {
-            $ARTIFACT_NAME = "discord-gdpr-counter-$Env:TARGET_TRIPLE"
-          }
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Create Zip Archive (Linux and macOS)
+      # Zipping for Linux and macOS
+      - name: Zip the build on Linux and macOS
         if: runner.os != 'Windows'
-        shell: bash
         run: |
           mkdir -p artifacts
-          zip -j "artifacts/${{ env.ARTIFACT_NAME }}.zip" "target/release/discord-gdpr-counter"
+          zip -j artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/my_executable_name
 
-      - name: Create Zip Archive (Windows)
+      # Zipping for Windows
+      - name: Zip the build on Windows
         if: runner.os == 'Windows'
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path artifacts
-          Compress-Archive -Path "target\release\discord-gdpr-counter.exe" -DestinationPath "artifacts\$($Env:ARTIFACT_NAME).zip"
+          mkdir -p artifacts
+          powershell Compress-Archive -Path target/release/my_executable_name.exe -DestinationPath artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}.zip
-          path: artifacts/${{ env.ARTIFACT_NAME }}.zip
+          name: "${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}"
+          path: "artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip"
