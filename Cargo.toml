@@ -3,13 +3,25 @@ name = "discord-gdpr-counter"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+zip = ["dep:zip", "dep:tempfile"]
+
+
 [dependencies]
-clap = { version = "4.1.6", default-features = true, features = ["derive"] }
-zip = "2.2.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+clap = { version = "4.5", features = ["derive"] }
 indicatif = "0.17"
-tempfile = "3.3"
+serde =  "1.0"
+serde_json = "1.0"
+thiserror = "1.0"
+
+[dependencies.zip]
+version = "2.2.0"
+optional = true
+
+[dependencies.tempfile]
+version = "3.3"
+optional = true
 
 [profile.release]
 strip = true
