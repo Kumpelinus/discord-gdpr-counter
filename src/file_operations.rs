@@ -25,7 +25,10 @@ pub struct DataRoot {
     pub path: PathBuf,
 }
 
-type Mappings = (Option<HashMap<String, String>>, Option<HashMap<String, String>>);
+type Mappings = (
+    Option<HashMap<String, String>>,
+    Option<HashMap<String, String>>,
+);
 
 pub fn prepare_data_root(input_path: &Path) -> Result<DataRoot, MyError> {
     #[cfg(feature = "zip")]
@@ -62,9 +65,7 @@ pub fn prepare_data_root(input_path: &Path) -> Result<DataRoot, MyError> {
     }
 }
 
-pub fn load_mappings(
-    data_root: &DataRoot,
-) -> Result<Mappings, MyError> {
+pub fn load_mappings(data_root: &DataRoot) -> Result<Mappings, MyError> {
     let messages_folder = data_root.path.join("messages");
     let servers_folder = data_root.path.join("servers");
 
@@ -113,7 +114,12 @@ pub fn process_conversations(
             let channel_id = path
                 .file_name()
                 .and_then(|name| name.to_str())
-                .ok_or_else(|| MyError::InvalidInputPath(format!("Invalid channel ID in path: {}", path.display())))?
+                .ok_or_else(|| {
+                    MyError::InvalidInputPath(format!(
+                        "Invalid channel ID in path: {}",
+                        path.display()
+                    ))
+                })?
                 .to_string();
 
             let messages_file = path.join("messages.json");
@@ -140,13 +146,14 @@ pub fn process_conversations(
                         .unwrap_or(&channel_id)
                         .to_string();
 
-                    let guild = guilds
-                        .entry(guild_id.to_string())
-                        .or_insert_with(|| Conversation::Guild {
-                            name: guild_name.clone(),
-                            message_count: 0,
-                            channels: Vec::new(),
-                        });
+                    let guild =
+                        guilds
+                            .entry(guild_id.to_string())
+                            .or_insert_with(|| Conversation::Guild {
+                                name: guild_name.clone(),
+                                message_count: 0,
+                                channels: Vec::new(),
+                            });
 
                     if let Conversation::Guild {
                         message_count,
