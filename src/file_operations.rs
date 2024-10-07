@@ -16,6 +16,7 @@ use zip::read::ZipArchive;
 #[cfg(feature = "zip")]
 pub struct DataRoot {
     pub path: PathBuf,
+    #[allow(dead_code)]
     temp_dir: Option<TempDir>,
 }
 
@@ -23,6 +24,8 @@ pub struct DataRoot {
 pub struct DataRoot {
     pub path: PathBuf,
 }
+
+type Mappings = (Option<HashMap<String, String>>, Option<HashMap<String, String>>);
 
 pub fn prepare_data_root(input_path: &Path) -> Result<DataRoot, MyError> {
     #[cfg(feature = "zip")]
@@ -61,7 +64,7 @@ pub fn prepare_data_root(input_path: &Path) -> Result<DataRoot, MyError> {
 
 pub fn load_mappings(
     data_root: &DataRoot,
-) -> Result<(Option<HashMap<String, String>>, Option<HashMap<String, String>>), MyError> {
+) -> Result<Mappings, MyError> {
     let messages_folder = data_root.path.join("messages");
     let servers_folder = data_root.path.join("servers");
 
@@ -88,7 +91,7 @@ pub fn process_conversations(
     guild_mapping: &Option<HashMap<String, String>>,
 ) -> Result<Vec<Conversation>, MyError> {
     let messages_folder = data_root.path.join("messages");
-    let entries = fs::read_dir(&messages_folder)?;
+    let entries = fs::read_dir(messages_folder)?;
 
     let progress = ProgressBar::new_spinner();
     progress.set_style(
