@@ -34,13 +34,17 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
 
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
+
+      - name: Install zip (if needed)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y zip
 
       - name: Check
         run: cargo check --features "${{ matrix.features }}"
@@ -53,8 +57,38 @@ jobs:
       - name: Build
         run: cargo build --release --features "${{ matrix.features }}"
 
+      - name: Set Target Triple
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            echo "TARGET_TRIPLE=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            echo "TARGET_TRIPLE=x86_64-apple-darwin" >> $GITHUB_ENV
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            echo "TARGET_TRIPLE=x86_64-pc-windows-msvc" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Set Artifact Name
+        run: |
+          if [ "${{ matrix.features }}" != "" ]; then
+            echo "ARTIFACT_NAME=your_project_name-${{ env.TARGET_TRIPLE }}.${{ matrix.features }}.zip" >> $GITHUB_ENV
+          else
+            echo "ARTIFACT_NAME=your_project_name-${{ env.TARGET_TRIPLE }}.zip" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Create Zip Archive
+        run: |
+          mkdir -p artifacts
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            Compress-Archive -Path "target\\release\\your_executable_name.exe" -DestinationPath "artifacts\\${{ env.ARTIFACT_NAME }}"
+          else
+            zip -j "artifacts/${{ env.ARTIFACT_NAME }}" "target/release/your_executable_name"
+          fi
+        shell: bash
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v3
         with:
-          name: binary-${{ matrix.os }}-features-${{ matrix.features }}
-          path: target/release/
+          name: ${{ env.ARTIFACT_NAME }}
+          path: artifacts/${{ env.ARTIFACT_NAME }}
