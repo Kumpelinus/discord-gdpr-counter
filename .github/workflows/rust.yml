@@ -91,9 +91,9 @@ jobs:
             else
               FEATURE_NAME="${{ matrix.features }}"
             fi
-            ARTIFACT_NAME="your_project_name-${{ env.TARGET_TRIPLE }}.${FEATURE_NAME}"
+            ARTIFACT_NAME="discord-gdpr-counter-${{ env.TARGET_TRIPLE }}.${FEATURE_NAME}"
           else
-            ARTIFACT_NAME="your_project_name-${{ env.TARGET_TRIPLE }}"
+            ARTIFACT_NAME="discord-gdpr-counter-${{ env.TARGET_TRIPLE }}"
           fi
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
 
@@ -107,9 +107,9 @@ jobs:
             } else {
               $FEATURE_NAME = $Env:matrix_features
             }
-            $ARTIFACT_NAME = "your_project_name-$Env:TARGET_TRIPLE.$FEATURE_NAME"
+            $ARTIFACT_NAME = "discord-gdpr-counter-$Env:TARGET_TRIPLE.$FEATURE_NAME"
           } else {
-            $ARTIFACT_NAME = "your_project_name-$Env:TARGET_TRIPLE"
+            $ARTIFACT_NAME = "discord-gdpr-counter-$Env:TARGET_TRIPLE"
           }
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -118,14 +118,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          zip -j "artifacts/${{ env.ARTIFACT_NAME }}.zip" "target/release/your_executable_name"
+          zip -j "artifacts/${{ env.ARTIFACT_NAME }}.zip" "target/release/discord-gdpr-counter"
 
       - name: Create Zip Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path artifacts
-          Compress-Archive -Path "target\release\your_executable_name.exe" -DestinationPath "artifacts\$($Env:ARTIFACT_NAME).zip"
+          Compress-Archive -Path "target\release\discord-gdpr-counter.exe" -DestinationPath "artifacts\$($Env:ARTIFACT_NAME).zip"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
