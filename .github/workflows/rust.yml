@@ -75,43 +75,65 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check
+      # Check for Linux and macOS
+      - name: Check on Linux and macOS
+        if: runner.os != 'Windows'
         run: |
-          if [ -z "${{ matrix.features }}" ]; then
+          if [[ -z "${{ matrix.features }}" ]]; then
             cargo check
           else
             cargo check --features "${{ matrix.features }}"
           fi
+        shell: bash
 
-      - name: Build
+      # Check for Windows
+      - name: Check on Windows
+        if: runner.os == 'Windows'
         run: |
-          if [ -z "${{ matrix.features }}" ]; then
+          if (-not "${{ matrix.features }}") {
+            cargo check
+          } else {
+            cargo check --features ${{ matrix.features }}
+          }
+        shell: powershell
+
+      # Build for Linux and macOS
+      - name: Build on Linux and macOS
+        if: runner.os != 'Windows'
+        run: |
+          if [[ -z "${{ matrix.features }}" ]]; then
             cargo build --release
           else
             cargo build --release --features "${{ matrix.features }}"
           fi
+        shell: bash
+
+      # Build for Windows
+      - name: Build on Windows
+        if: runner.os == 'Windows'
+        run: |
+          if (-not "${{ matrix.features }}") {
+            cargo build --release
+          } else {
+            cargo build --release --features ${{ matrix.features }}
+          }
+        shell: powershell
 
       # Zipping for Linux and macOS
       - name: Zip the build on Linux and macOS
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
-          if [ -f target/release/discord-gdpr-counter ]; then
-            zip -j artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/discord-gdpr-counter
-          else
-            echo "Binary not found. Skipping zip step."
-          fi
+          zip -j artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/discord-gdpr-counter
+        shell: bash
 
       # Zipping for Windows
       - name: Zip the build on Windows
         if: runner.os == 'Windows'
         run: |
           mkdir -p artifacts
-          if [ -f target/release/discord-gdpr-counter.exe ]; then
-            powershell Compress-Archive -Path target/release/discord-gdpr-counter.exe -DestinationPath artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
-          else
-            echo "Binary not found. Skipping zip step."
-          fi
+          Compress-Archive -Path target/release/discord-gdpr-counter.exe -DestinationPath artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
+        shell: powershell
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
