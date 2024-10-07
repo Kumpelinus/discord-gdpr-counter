@@ -1,6 +1,5 @@
 use clap::{Parser, ValueEnum};
-use indicatif::{ProgressBar, ProgressStyle};
-use std::path::PathBuf;
+use std::{cmp::Reverse, path::PathBuf};
 
 mod errors;
 mod file_operations;
@@ -142,7 +141,7 @@ fn filter_and_sort_conversations(
         .collect();
 
     // Sort conversations by message count in descending order
-    filtered.sort_unstable_by(|a, b| b.message_count().cmp(&a.message_count()));
+    filtered.sort_unstable_by_key(|conv| Reverse(conv.message_count()));
 
     // Apply limit if specified
     if let Some(limit) = limit {
