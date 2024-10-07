@@ -13,36 +13,48 @@ on:
       - "**.md"
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        features:
+          - ""
+          - "zip"
 
-    name: Test `cargo check/test/build` on ${{ matrix.os }}
+    name: Build and Test on ${{ matrix.os }} with features '${{ matrix.features }}'
     runs-on: ${{ matrix.os }}
-
-    env:
-      CARGO_TERM_COLOR: always
 
     steps:
       - uses: actions/checkout@v4
 
-      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      # Run your Rust commands in the root directory
-      - run: |
-          cargo check
-          cargo test
-          cargo build --release
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-      # Upload the build artifact (adjust the path if necessary)
+      - name: Check
+        run: cargo check --features "${{ matrix.features }}"
+      - name: Test
+        run: cargo test --features "${{ matrix.features }}"
+      - name: Lint
+        run: cargo clippy --all-targets --features "${{ matrix.features }}" -- -D warnings
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Build
+        run: cargo build --release --features "${{ matrix.features }}"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v3
         with:
-          name: binary-${{ matrix.os }}
+          name: binary-${{ matrix.os }}-features-${{ matrix.features }}
           path: target/release/
