@@ -9,6 +9,7 @@ on:
       - main
     tags:
       - 'v*'  # Trigger on version tags for releases
+  workflow_dispatch:
 
 jobs:
   build-test:
