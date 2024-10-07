@@ -42,53 +42,93 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Install zip (if needed)
+      - name: Install zip (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y zip
 
+      - name: Install zip (macOS)
+        if: runner.os == 'macOS'
+        run: brew install zip
+
       - name: Check
         run: cargo check --features "${{ matrix.features }}"
+
       - name: Test
         run: cargo test --features "${{ matrix.features }}"
+
       - name: Lint
         run: cargo clippy --all-targets --features "${{ matrix.features }}" -- -D warnings
+
       - name: Format
         run: cargo fmt --all -- --check
+
       - name: Build
         run: cargo build --release --features "${{ matrix.features }}"
 
-      - name: Set Target Triple
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            echo "TARGET_TRIPLE=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            echo "TARGET_TRIPLE=x86_64-apple-darwin" >> $GITHUB_ENV
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            echo "TARGET_TRIPLE=x86_64-pc-windows-msvc" >> $GITHUB_ENV
-          fi
+      - name: Set Target Triple (Linux and macOS)
+        if: runner.os != 'Windows'
         shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            echo "TARGET_TRIPLE=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            echo "TARGET_TRIPLE=x86_64-apple-darwin" >> $GITHUB_ENV
+          fi
 
-      - name: Set Artifact Name
+      - name: Set Target Triple (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "TARGET_TRIPLE=x86_64-pc-windows-msvc" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Set Artifact Name (Linux and macOS)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           if [ "${{ matrix.features }}" != "" ]; then
-            echo "ARTIFACT_NAME=your_project_name-${{ env.TARGET_TRIPLE }}.${{ matrix.features }}.zip" >> $GITHUB_ENV
+            if [ "${{ matrix.features }}" == "zip" ]; then
+              FEATURE_NAME="full"
+            else
+              FEATURE_NAME="${{ matrix.features }}"
+            fi
+            ARTIFACT_NAME="your_project_name-${{ env.TARGET_TRIPLE }}.${FEATURE_NAME}"
           else
-            echo "ARTIFACT_NAME=your_project_name-${{ env.TARGET_TRIPLE }}.zip" >> $GITHUB_ENV
+            ARTIFACT_NAME="your_project_name-${{ env.TARGET_TRIPLE }}"
           fi
-        shell: bash
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
 
-      - name: Create Zip Archive
+      - name: Set Artifact Name (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($Env:matrix_features -ne "") {
+            if ($Env:matrix_features -eq "zip") {
+              $FEATURE_NAME = "full"
+            } else {
+              $FEATURE_NAME = $Env:matrix_features
+            }
+            $ARTIFACT_NAME = "your_project_name-$Env:TARGET_TRIPLE.$FEATURE_NAME"
+          } else {
+            $ARTIFACT_NAME = "your_project_name-$Env:TARGET_TRIPLE"
+          }
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Create Zip Archive (Linux and macOS)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           mkdir -p artifacts
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            Compress-Archive -Path "target\\release\\your_executable_name.exe" -DestinationPath "artifacts\\${{ env.ARTIFACT_NAME }}"
-          else
-            zip -j "artifacts/${{ env.ARTIFACT_NAME }}" "target/release/your_executable_name"
-          fi
-        shell: bash
+          zip -j "artifacts/${{ env.ARTIFACT_NAME }}.zip" "target/release/your_executable_name"
+
+      - name: Create Zip Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts
+          Compress-Archive -Path "target\release\your_executable_name.exe" -DestinationPath "artifacts\$($Env:ARTIFACT_NAME).zip"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: artifacts/${{ env.ARTIFACT_NAME }}
+          name: ${{ env.ARTIFACT_NAME }}.zip
+          path: artifacts/${{ env.ARTIFACT_NAME }}.zip
