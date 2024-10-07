@@ -8,7 +8,7 @@ on:
     branches:
       - main
     tags:
-      - 'v*'  # Trigger on version tags for releases
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -77,18 +77,18 @@ jobs:
 
       - name: Check
         run: |
-          if [ "${{ matrix.features }}" == "zip" ]; then
-            cargo check --features "zip"
-          else
+          if [ -z "${{ matrix.features }}" ]; then
             cargo check
+          else
+            cargo check --features "${{ matrix.features }}"
           fi
 
       - name: Build
         run: |
-          if [ "${{ matrix.features }}" == "zip" ]; then
-            cargo build --release --features "zip"
-          else
+          if [ -z "${{ matrix.features }}" ]; then
             cargo build --release
+          else
+            cargo build --release --features "${{ matrix.features }}"
           fi
 
       # Zipping for Linux and macOS
@@ -96,17 +96,25 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
-          zip -j artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/discord-gdpr-counter
+          if [ -f target/release/discord-gdpr-counter ]; then
+            zip -j artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip target/release/discord-gdpr-counter
+          else
+            echo "Binary not found. Skipping zip step."
+          fi
 
       # Zipping for Windows
       - name: Zip the build on Windows
         if: runner.os == 'Windows'
         run: |
           mkdir -p artifacts
-          powershell Compress-Archive -Path target/release/discord-gdpr-counter.exe -DestinationPath artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
+          if [ -f target/release/discord-gdpr-counter.exe ]; then
+            powershell Compress-Archive -Path target/release/discord-gdpr-counter.exe -DestinationPath artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip
+          else
+            echo "Binary not found. Skipping zip step."
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}"
-          path: "artifacts/${{ github.repository }}-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip"
+          name: "discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}"
+          path: "artifacts/discord-gdpr-counter-${{ matrix.target }}-${{ matrix.label }}-${{ matrix.os }}.zip"
