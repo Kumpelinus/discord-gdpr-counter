@@ -62,7 +62,10 @@ impl Conversation {
 
     fn print_tree(&self) {
         match self {
-            Self::DmOrGc { name, message_count } => {
+            Self::DmOrGc {
+                name,
+                message_count,
+            } => {
                 println!("{} [{} messages]", name, message_count);
             }
             Self::Guild {
@@ -74,7 +77,11 @@ impl Conversation {
                 let mut sorted_channels = channels.clone();
                 sorted_channels.sort_unstable_by(|a, b| b.message_count.cmp(&a.message_count));
                 for (i, channel) in sorted_channels.iter().enumerate() {
-                    let connector = if i == sorted_channels.len() - 1 { "└──" } else { "├──" };
+                    let connector = if i == sorted_channels.len() - 1 {
+                        "└──"
+                    } else {
+                        "├──"
+                    };
                     println!(
                         "    {} {} [{} messages]",
                         connector, channel.name, channel.message_count
@@ -96,11 +103,7 @@ fn main() -> Result<(), MyError> {
     let (channel_mapping, guild_mapping) = load_mappings(&data_root)?;
 
     // Process conversations
-    let conversations = process_conversations(
-        &data_root,
-        &channel_mapping,
-        &guild_mapping,
-    )?;
+    let conversations = process_conversations(&data_root, &channel_mapping, &guild_mapping)?;
 
     // Filter and sort conversations
     let filtered_conversations = filter_and_sort_conversations(
